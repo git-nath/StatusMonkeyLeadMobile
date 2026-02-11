@@ -1,87 +1,146 @@
 import { StatusBar } from 'expo-status-bar';
-import { useMemo, useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { fetchDashboardAndLeads, markLeadContacted, markLeadIgnored } from './src/api/statusMonkeyApi';
 import { LeadCard } from './src/components/LeadCard';
-import { LeadDetailModal } from './src/components/LeadDetailModal';
-import { mockLeads } from './src/data/mockLeads';
-import type { Lead, LeadStatus } from './src/types/lead';
+import { StatCard } from './src/components/StatCard';
+import { API_BASE_URL } from './src/config/api';
+import type { LeadFeedFilter, LeadsResponse } from './src/types/lead';
 
-const statusFilters: Array<{ label: string; value: LeadStatus | 'all' }> = [
-  { label: 'All', value: 'all' },
-  { label: 'New', value: 'new' },
-  { label: 'Contacted', value: 'contacted' },
-  { label: 'Qualified', value: 'qualified' },
-  { label: 'Proposal', value: 'proposal' },
-  { label: 'Won', value: 'won' },
-  { label: 'Lost', value: 'lost' },
+const feedFilters: Array<{ key: LeadFeedFilter; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'today', label: 'Today' },
+  { key: 'pinned', label: 'Pinned' },
+  { key: 'top', label: 'Top 10' },
+  { key: 'hot', label: 'Hot' },
+  { key: 'contacted', label: 'Contacted' },
+  { key: 'replied', label: 'Replied' },
+  { key: 'converted', label: 'Converted' },
+  { key: 'ignored', label: 'Ignored' },
 ];
 
 export default function App() {
-  const [searchValue, setSearchValue] = useState('');
-  const [activeStatus, setActiveStatus] = useState<LeadStatus | 'all'>('all');
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<LeadFeedFilter>('all');
+  const [payload, setPayload] = useState<LeadsResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredLeads = useMemo(() => {
-    return mockLeads.filter((lead) => {
-      const matchesSearch =
-        lead.companyName.toLowerCase().includes(searchValue.toLowerCase()) ||
-        lead.contactName.toLowerCase().includes(searchValue.toLowerCase()) ||
-        lead.email.toLowerCase().includes(searchValue.toLowerCase());
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
 
-      const matchesStatus = activeStatus === 'all' ? true : lead.status === activeStatus;
-      return matchesSearch && matchesStatus;
-    });
-  }, [activeStatus, searchValue]);
+    try {
+      const next = await fetchDashboardAndLeads({ query, filter });
+      setPayload(next);
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Unknown request error';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filter, query]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onMarkContacted = async (leadId: string) => {
+    try {
+      await markLeadContacted(leadId);
+      await loadData();
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Failed to mark lead contacted';
+      setError(message);
+    }
+  };
+
+  const onMarkIgnored = async (leadId: string) => {
+    try {
+      await markLeadIgnored(leadId);
+      await loadData();
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : 'Failed to ignore lead';
+      setError(message);
+    }
+  };
+
+  const stats = payload?.stats;
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
-      <View style={styles.header}>
-        <Text style={styles.title}>StatusMonkey Leads</Text>
-        <Text style={styles.subtitle}>Mobile lead finder dashboard</Text>
-      </View>
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.brand}>⚡ STATUSMONKEY LEAD FINDER</Text>
+        <Text style={styles.apiLine}>Connected to backend: {API_BASE_URL}</Text>
 
-      <View style={styles.searchWrapper}>
-        <TextInput
-          value={searchValue}
-          onChangeText={setSearchValue}
-          placeholder="Search company, contact, or email"
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.search}
+            placeholder="Search leads by keyword, subreddit, or author"
+            placeholderTextColor="#1EA35A"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            onSubmitEditing={loadData}
+          />
+          <Pressable style={styles.refreshBtn} onPress={loadData}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
+        </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-        {statusFilters.map((filter) => {
-          const isActive = filter.value === activeStatus;
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statsRow}>
+          <StatCard label="Total Leads" value={String(stats?.totalLeads ?? 0)} />
+          <StatCard label="Emergency" value={String(stats?.emergency ?? 0)} tone="emergency" />
+          <StatCard label="Hot" value={String(stats?.hot ?? 0)} tone="hot" />
+          <StatCard label="Warm" value={String(stats?.warm ?? 0)} tone="warm" />
+          <StatCard label="Contacted" value={String(stats?.contacted ?? 0)} />
+        </ScrollView>
 
-          return (
-            <Text
-              key={filter.value}
-              onPress={() => setActiveStatus(filter.value)}
-              style={[styles.filterChip, isActive ? styles.filterChipActive : styles.filterChipInactive]}
-            >
-              {filter.label}
-            </Text>
-          );
-        })}
-      </ScrollView>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {feedFilters.map((item) => {
+            const selected = item.key === filter;
+            const count = payload?.filterCounts[item.key] ?? 0;
 
-      <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-        {filteredLeads.map((lead) => (
-          <LeadCard key={lead.id} lead={lead} onPress={setSelectedLead} />
-        ))}
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => setFilter(item.key)}
+                style={[styles.filterChip, selected ? styles.filterChipSelected : undefined]}
+              >
+                <Text style={styles.filterLabel}>{item.label}</Text>
+                <Text style={styles.filterCount}>{count}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
-        {filteredLeads.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No leads found</Text>
-            <Text style={styles.emptySubtitle}>Try adjusting your search or status filter.</Text>
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        {isLoading ? (
+          <ActivityIndicator color="#00FF66" style={styles.loader} />
+        ) : (
+          <View style={styles.leadsList}>
+            {payload?.leads.map((lead) => (
+              <LeadCard key={lead.id} lead={lead} onMarkContacted={onMarkContacted} onMarkIgnored={onMarkIgnored} />
+            ))}
+
+            {payload && payload.leads.length === 0 ? (
+              <Text style={styles.empty}>No leads returned by backend for this filter.</Text>
+            ) : null}
           </View>
-        ) : null}
+        )}
       </ScrollView>
-
-      <LeadDetailModal lead={selectedLead} onClose={() => setSelectedLead(null)} />
     </SafeAreaView>
   );
 }
@@ -89,75 +148,99 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#010A14',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 14,
+  content: {
+    padding: 12,
+    paddingBottom: 24,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#0F172A',
+  brand: {
+    color: '#00FF66',
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 8,
   },
-  subtitle: {
-    marginTop: 4,
-    color: '#475569',
-  },
-  searchWrapper: {
-    paddingHorizontal: 20,
+  apiLine: {
+    color: '#00F5FF',
+    fontSize: 11,
     marginBottom: 12,
   },
-  searchInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
   },
-  filters: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+  search: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#00FF66',
+    color: '#00FF66',
+    backgroundColor: '#03120D',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+  },
+  refreshBtn: {
+    borderWidth: 1,
+    borderColor: '#00F5FF',
+    backgroundColor: '#00172A',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  refreshText: {
+    color: '#00F5FF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  statsRow: {
+    paddingBottom: 10,
+  },
+  filterRow: {
+    paddingBottom: 10,
   },
   filterChip: {
-    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#00FF66',
+    paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 999,
     marginRight: 8,
-    overflow: 'hidden',
-    fontSize: 13,
-    fontWeight: '600',
+    backgroundColor: '#03120D',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  filterChipActive: {
-    backgroundColor: '#2563EB',
-    color: '#FFFFFF',
+  filterChipSelected: {
+    backgroundColor: '#0A2C12',
+    borderColor: '#CCFF00',
   },
-  filterChipInactive: {
-    backgroundColor: '#E2E8F0',
-    color: '#334155',
+  filterLabel: {
+    color: '#00FF66',
+    fontSize: 12,
+    fontWeight: '700',
   },
-  list: {
-    flex: 1,
+  filterCount: {
+    color: '#CCFF00',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  errorText: {
+    borderWidth: 1,
+    borderColor: '#FF2D2D',
+    color: '#FF6B6B',
+    backgroundColor: '#1C0202',
+    padding: 10,
+    marginBottom: 10,
+  },
+  loader: {
+    marginTop: 24,
+  },
+  leadsList: {
     marginTop: 4,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 28,
-  },
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  emptySubtitle: {
-    color: '#64748B',
-    marginTop: 8,
+  empty: {
+    color: '#00FF66',
+    textAlign: 'center',
+    marginTop: 24,
   },
 });

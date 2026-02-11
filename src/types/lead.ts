@@ -1,15 +1,35 @@
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
+export type LeadFeedFilter = 'all' | 'today' | 'pinned' | 'top' | 'hot' | 'contacted' | 'replied' | 'converted' | 'ignored';
+
+export interface DashboardStats {
+  totalLeads: number;
+  emergency: number;
+  hot: number;
+  warm: number;
+  contacted: number;
+  dailyGoalCurrent: number;
+  dailyGoalTarget: number;
+  converted: number;
+  revenue: number;
+}
 
 export interface Lead {
   id: string;
-  companyName: string;
-  contactName: string;
   title: string;
-  email: string;
-  phone: string;
-  score: number;
-  status: LeadStatus;
-  source: string;
-  notes: string;
-  createdAt: string;
+  subreddit: string;
+  author: string;
+  commentsCount: number;
+  priority: 'emergency' | 'hot' | 'warm' | 'normal';
+  postedAt: string;
+  postUrl: string;
+  contacted: boolean;
+  replied: boolean;
+  converted: boolean;
+  ignored: boolean;
+  pinned: boolean;
+}
+
+export interface LeadsResponse {
+  stats: DashboardStats;
+  filterCounts: Record<LeadFeedFilter, number>;
+  leads: Lead[];
 }

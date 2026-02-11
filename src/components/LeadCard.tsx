@@ -1,87 +1,84 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Lead } from '../types/lead';
 
 interface LeadCardProps {
   lead: Lead;
-  onPress: (lead: Lead) => void;
+  onMarkContacted: (leadId: string) => void;
+  onMarkIgnored: (leadId: string) => void;
 }
 
-const statusColorMap = {
-  new: '#64748B',
-  contacted: '#2563EB',
-  qualified: '#7C3AED',
-  proposal: '#EA580C',
-  won: '#16A34A',
-  lost: '#DC2626',
+const priorityBorder = {
+  emergency: '#FF2D2D',
+  hot: '#FF5A00',
+  warm: '#FFC400',
+  normal: '#00F5FF',
 } as const;
 
-export function LeadCard({ lead, onPress }: LeadCardProps) {
+export function LeadCard({ lead, onMarkContacted, onMarkIgnored }: LeadCardProps) {
   return (
-    <Pressable style={styles.card} onPress={() => onPress(lead)}>
-      <View style={styles.headerRow}>
-        <Text style={styles.company} numberOfLines={1}>
-          {lead.companyName}
-        </Text>
-        <View style={[styles.statusPill, { backgroundColor: statusColorMap[lead.status] }]}>
-          <Text style={styles.statusText}>{lead.status.toUpperCase()}</Text>
-        </View>
+    <View style={[styles.card, { borderColor: priorityBorder[lead.priority] }]}>
+      <Text style={styles.title} numberOfLines={2}>
+        {lead.title}
+      </Text>
+      <Text style={styles.meta}>
+        r/{lead.subreddit} · u/{lead.author} · {lead.commentsCount} comments
+      </Text>
+
+      <View style={styles.actions}>
+        <Pressable style={styles.actionButton} onPress={() => Linking.openURL(lead.postUrl)}>
+          <Text style={styles.actionText}>Open Post</Text>
+        </Pressable>
+
+        <Pressable style={[styles.actionButton, styles.actionPositive]} onPress={() => onMarkContacted(lead.id)}>
+          <Text style={styles.actionText}>Contacted</Text>
+        </Pressable>
+
+        <Pressable style={[styles.actionButton, styles.actionDanger]} onPress={() => onMarkIgnored(lead.id)}>
+          <Text style={styles.actionText}>Ignore</Text>
+        </Pressable>
       </View>
-      <Text style={styles.contact}>{lead.contactName} · {lead.title}</Text>
-      <View style={styles.bottomRow}>
-        <Text style={styles.source}>{lead.source}</Text>
-        <Text style={styles.score}>Score: {lead.score}</Text>
-      </View>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  company: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-    flex: 1,
-    marginRight: 8,
-  },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 100,
-  },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  contact: {
-    color: '#334155',
+    backgroundColor: '#04110B',
     marginBottom: 10,
+    padding: 12,
   },
-  bottomRow: {
+  title: {
+    color: '#33FF66',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  meta: {
+    color: '#9FFFC0',
+    marginTop: 6,
+    fontSize: 12,
+  },
+  actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 12,
   },
-  source: {
-    color: '#475569',
-    fontSize: 12,
+  actionButton: {
+    borderColor: '#00FF66',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#001B0E',
   },
-  score: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '600',
+  actionPositive: {
+    borderColor: '#00F5FF',
+  },
+  actionDanger: {
+    borderColor: '#FF2D2D',
+  },
+  actionText: {
+    color: '#00FF66',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
